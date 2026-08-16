@@ -1,0 +1,16 @@
+---
+- name: Увімкнути й запустити firewalld
+  ansible.builtin.systemd_service:
+    name: firewalld
+    enabled: true
+    state: started
+
+# Роль свідомо не чіпає SSH-порт і не звужує наявні правила: доступ до сервера —
+# зона відповідальності його власника, і помилка тут відрізає адміністратора.
+- name: Відкрити сервіси {{ sol_firewalld_services | join(', ') }}
+  ansible.posix.firewalld:
+    service: "{{ item }}"
+    permanent: true
+    state: enabled
+  loop: "{{ sol_firewalld_services }}"
+  notify: Reload firewalld

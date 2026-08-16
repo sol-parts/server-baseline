@@ -1,0 +1,61 @@
+---
+- name: Часова зона {{ sol_timezone }}
+  community.general.timezone:
+    name: "{{ sol_timezone }}"
+
+- name: Репозиторій EPEL і плагіни dnf
+  ansible.builtin.dnf:
+    name:
+      - epel-release
+      # dnf config-manager живе тут; на мінімальній інсталяції його немає
+      - dnf-plugins-core
+    state: present
+
+# CRB (CodeReady Builder) вимкнено в EL9 за замовчуванням, а частина утиліт для
+# роботи із зображеннями лежить тільки там (див. libwebp-tools нижче).
+- name: Увімкнути репозиторій CRB
+  ansible.builtin.command: dnf config-manager --set-enabled crb
+  changed_when: false
+
+- name: Базові пакети
+  ansible.builtin.dnf:
+    name:
+      # Робота з файлами постачальників: прайси приходять у zip/7z/xlsx
+      - unzip
+      - zip
+      - p7zip
+      - p7zip-plugins
+      - tar
+      - zstd
+      # Визначення кодування текстових прайсів (платформа викликає `enca`)
+      - enca
+      # Обробка зображень товарів
+      - ImageMagick
+      - jpegoptim
+      # Синхронізація фото в об'єктне сховище (команда бекапу зображень)
+      - rclone
+      # Обслуговування
+      - git
+      - rsync
+      - logrotate
+      - firewalld
+      - bind-utils
+      - python3-pip
+    state: present
+
+# webpmux потрібен команді, що зрізає EXIF із webp. libwebp приїжджає
+# залежністю ImageMagick, але це бібліотека — самі утиліти лежать окремим
+# пакетом і тільки в CRB, тому окремою задачею з enablerepo.
+- name: Утиліти libwebp (webpmux)
+  ansible.builtin.dnf:
+    name: libwebp-tools
+    state: present
+    enablerepo: crb
+
+# Легасі-імпорт прайсів викликає /usr/local/bin/xlsx2csv для великих xlsx,
+# які не варто тягнути в пам'ять PHP.
+- name: xlsx2csv
+  ansible.builtin.pip:
+    name: xlsx2csv
+    state: present
+    executable: pip3

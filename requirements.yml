@@ -1,0 +1,7 @@
+---
+# Колекції Ansible, які використовує роль.
+#   ansible-galaxy collection install -r requirements.yml
+collections:
+  - name: ansible.posix        # firewalld
+  - name: community.general    # timezone
+  - name: community.mysql      # mysql_db, mysql_user

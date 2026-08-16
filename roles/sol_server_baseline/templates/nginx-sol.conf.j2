@@ -1,0 +1,9 @@
+# Формат логу з часом відповіді: без нього «сайт гальмує» неможливо розібрати
+# постфактум. Ім'я власне (sol_main), щоб не конфліктувати з форматом, який
+# уже оголошений у /etc/nginx/nginx.conf вашого дистрибутива.
+# Керується Ansible-роллю sol_server_baseline — правки руками буде затерто.
+
+log_format sol_main '$remote_addr - $remote_user [$time_local] "$request" '
+                    '$status $body_bytes_sent "$http_referer" '
+                    '"$http_user_agent" "$http_x_forwarded_for" '
+                    'rt=$request_time urt=$upstream_response_time';

@@ -1,0 +1,43 @@
+; Значення, потрібні платформі sol.parts. Drop-in вантажиться після дефолтів
+; дистрибутива (php.d читається за абеткою), тому 99- в імені файлу обов'язкове.
+; Керується Ansible-роллю sol_server_baseline — правки руками буде затерто.
+
+memory_limit = {{ sol_php_memory_limit }}
+max_execution_time = {{ sol_php_max_execution_time }}
+
+; Імпорт прайсів і вивантаження фото йдуть звичайним HTTP-завантаженням.
+upload_max_filesize = {{ sol_php_upload_max_filesize }}
+post_max_size = {{ sol_php_post_max_size }}
+
+; Дефолт 1000 замалий: форма налаштувань адмінки надсилає понад тисячу полів,
+; і PHP мовчки обрізає $_POST — збереження «провалюється» без жодної помилки.
+max_input_vars = {{ sol_php_max_input_vars }}
+
+date.timezone = {{ sol_timezone }}
+default_charset = "UTF-8"
+
+; У продакшені текст помилки йде в лог, а не у відповідь клієнту.
+display_errors = Off
+display_startup_errors = Off
+log_errors = On
+expose_php = Off
+zend.exception_ignore_args = On
+
+; ─── OPcache ───
+; Дефолти консьюмерські: 128 МБ і 10 000 файлів. Symfony з Doctrine плюс
+; легасі-шар дають помітно більше файлів, і кеш «переповнюється» — частина
+; коду компілюється на кожен запит.
+opcache.enable = 1
+opcache.enable_cli = 1
+opcache.memory_consumption = {{ sol_php_opcache_memory }}
+opcache.max_accelerated_files = {{ sol_php_opcache_max_files }}
+opcache.interned_strings_buffer = 32
+
+; Обов'язково: атрибути читають Doctrine і Symfony, без коментарів мапінг ламається.
+opcache.save_comments = 1
+
+; Кеш перевіряє mtime — оновлення коду підхоплюється без ручного скидання.
+; file_update_protection страхує від читання файлу, який ще дописується.
+opcache.validate_timestamps = 1
+opcache.revalidate_freq = 2
+opcache.file_update_protection = 2

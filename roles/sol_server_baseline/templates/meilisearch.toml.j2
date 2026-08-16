@@ -1,0 +1,24 @@
+# Meilisearch — пошук по каталогу.
+# Керується Ansible-роллю sol_server_baseline — правки руками буде затерто.
+# Повний перелік опцій: https://www.meilisearch.com/docs/learn/self_hosted/configure_meilisearch_at_launch
+
+db_path = "/var/lib/meilisearch/data/"
+dump_dir = "/var/lib/meilisearch/dumps/"
+snapshot_dir = "/var/lib/meilisearch/snapshots/"
+
+env = "production"
+
+# Слухає лише локальний інтерфейс: магазин ходить у пошук з цієї ж машини,
+# назовні порт відкривати не потрібно.
+http_addr = "{{ sol_meilisearch_http_addr }}"
+
+master_key = "{{ sol_meilisearch_master_key }}"
+
+# Переіндексація каталогу йде великими пакетами документів.
+http_payload_size_limit = "{{ sol_meilisearch_payload_limit }}"
+
+log_level = "WARN"
+
+# Обмеження пам'яті на індексацію. Без нього Meilisearch орієнтується на всю
+# вільну пам'ять машини і на невеликому сервері конкурує з MariaDB та PHP-FPM.
+# max_indexing_memory = "2 GiB"

@@ -1,0 +1,8 @@
+# Офіційний репозиторій MariaDB. Керується Ansible-роллю sol_server_baseline.
+[mariadb]
+name = MariaDB {{ sol_mariadb_version }}
+baseurl = https://mirror.mariadb.org/yum/{{ sol_mariadb_version }}/rhel/{{ ansible_distribution_major_version }}/$basearch
+gpgkey = https://mirror.mariadb.org/yum/RPM-GPG-KEY-MariaDB
+gpgcheck = 1
+enabled = 1
+module_hotfixes = 1

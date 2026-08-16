@@ -1,0 +1,34 @@
+# Ротація логів сайту {{ sol_site_domain }}.
+# Керується Ansible-роллю sol_server_baseline — правки руками буде затерто.
+
+{{ sol_site_logs }}/nginx-*.log {
+    create 0640 nginx {{ sol_site_group }}
+    daily
+    rotate 30
+    maxsize 200M
+    missingok
+    notifempty
+    compress
+    delaycompress
+    sharedscripts
+    postrotate
+        test ! -f /run/nginx.pid || kill -USR1 `cat /run/nginx.pid`
+    endscript
+}
+
+# create саме під користувачем пулу: після сигналу воркер FPM відкриває файл
+# від свого імені, тож root-овий файл зробив би лог недоступним на запис.
+{{ sol_site_logs }}/php-fpm-*.log {
+    create 0640 {{ sol_site_user }} {{ sol_site_group }}
+    daily
+    rotate 14
+    maxsize 200M
+    missingok
+    notifempty
+    compress
+    delaycompress
+    sharedscripts
+    postrotate
+        /bin/kill -SIGUSR1 `cat /var/opt/remi/{{ sol_php_version }}/run/php-fpm/php-fpm.pid 2>/dev/null` 2>/dev/null || true
+    endscript
+}

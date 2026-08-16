@@ -1,0 +1,82 @@
+---
+- name: Репозиторій MariaDB {{ sol_mariadb_version }}
+  ansible.builtin.template:
+    src: mariadb.repo.j2
+    dest: /etc/yum.repos.d/mariadb.repo
+    mode: "0644"
+
+- name: MariaDB server
+  ansible.builtin.dnf:
+    name:
+      - mariadb-server
+      # Потрібен модулям Ansible mysql_db / mysql_user
+      - python3-PyMySQL
+    state: present
+
+- name: Тека drop-in для юніта MariaDB
+  ansible.builtin.file:
+    path: /etc/systemd/system/mariadb.service.d
+    state: directory
+    mode: "0755"
+
+- name: Перезапуск MariaDB після падіння
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/mariadb.service.d/restart-on-failure.conf
+    content: |
+      [Service]
+      Restart=on-failure
+      RestartSec=10s
+    mode: "0644"
+  notify: Restart MariaDB
+
+# Drop-in, а не заміна /etc/my.cnf: значення дистрибутива лишаються, ми
+# додаємо тільки те, без чого платформа працює неправильно.
+- name: Налаштування MariaDB, потрібні платформі
+  ansible.builtin.template:
+    src: mariadb-sol.cnf.j2
+    dest: /etc/my.cnf.d/99-sol.cnf
+    mode: "0644"
+  notify: Restart MariaDB
+
+- name: Увімкнути й запустити MariaDB
+  ansible.builtin.systemd_service:
+    name: mariadb
+    enabled: true
+    state: started
+
+- name: Прибрати тестову БД
+  community.mysql.mysql_db:
+    name: test
+    login_unix_socket: /var/lib/mysql/mysql.sock
+    state: absent
+
+- name: Прибрати анонімних користувачів
+  community.mysql.mysql_user:
+    name: ""
+    host_all: true
+    login_unix_socket: /var/lib/mysql/mysql.sock
+    state: absent
+
+- name: База даних магазину
+  community.mysql.mysql_db:
+    name: "{{ sol_db_name }}"
+    encoding: utf8mb4
+    collation: utf8mb4_unicode_ci
+    login_unix_socket: /var/lib/mysql/mysql.sock
+    state: present
+  when: sol_db_name | length > 0
+
+- name: Користувач БД
+  community.mysql.mysql_user:
+    name: "{{ sol_db_user }}"
+    password: "{{ sol_db_password }}"
+    host: localhost
+    priv: "{{ sol_db_name }}.*:ALL"
+    append_privs: false
+    login_unix_socket: /var/lib/mysql/mysql.sock
+    state: present
+  no_log: true
+  when:
+    - sol_db_name | length > 0
+    - sol_db_user | length > 0
+    - sol_db_password | length > 0

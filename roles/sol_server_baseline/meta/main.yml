@@ -1,0 +1,22 @@
+---
+galaxy_info:
+  role_name: sol_server_baseline
+  namespace: sol_parts
+  author: sol.parts
+  description: >-
+    Базові залежності сервера для магазину на платформі sol.parts:
+    PHP-FPM, MariaDB, nginx, Meilisearch, TLS, firewalld.
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+  galaxy_tags:
+    - php
+    - mariadb
+    - nginx
+    - meilisearch
+    - ecommerce
+
+dependencies: []

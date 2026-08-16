@@ -1,0 +1,95 @@
+---
+# Підсумкова перевірка: те саме, що робить scripts/check-server.sh, але вже
+# після налаштування. Читальна — нічого не змінює, тож її можна ганяти окремо
+# (--tags verify) як «чи відповідає сервер вимогам».
+
+- name: Версія PHP
+  ansible.builtin.command: /usr/local/bin/php -v
+  changed_when: false
+  register: sol_verify_php
+
+- name: Перелік розширень PHP
+  ansible.builtin.command: /usr/local/bin/php -m
+  changed_when: false
+  register: sol_verify_php_modules
+
+- name: Усі потрібні розширення PHP на місці
+  ansible.builtin.assert:
+    that:
+      - item in sol_verify_php_modules.stdout_lines
+    fail_msg: "Немає розширення PHP: {{ item }}"
+  loop:
+    - bcmath
+    - curl
+    - dom
+    - gd
+    - iconv
+    - imagick
+    - imap
+    - intl
+    - json
+    - libxml
+    - mbstring
+    - mysqli
+    - openssl
+    - pdo_mysql
+    - simplexml
+    - soap
+    - zip
+    - Zend OPcache
+
+- name: Версія MariaDB
+  ansible.builtin.command: mariadb --version
+  changed_when: false
+  failed_when: false
+  register: sol_verify_mariadb
+
+- name: Конфіг nginx валідний
+  ansible.builtin.command: nginx -t
+  changed_when: false
+  register: sol_verify_nginx
+
+- name: Meilisearch відповідає
+  ansible.builtin.uri:
+    url: "http://{{ sol_meilisearch_http_addr }}/health"
+    status_code: 200
+  changed_when: false
+  when: sol_meilisearch_manage | bool
+
+- name: Утиліти обробки прайсів і зображень
+  ansible.builtin.command: "which {{ item }}"
+  changed_when: false
+  failed_when: false
+  register: sol_verify_tools
+  loop:
+    - enca
+    - jpegoptim
+    - webpmux
+    - convert
+    - rclone
+    - xlsx2csv
+    - composer
+
+- name: Утиліт, яких бракує
+  ansible.builtin.debug:
+    msg: >-
+      Не знайдено: {{ sol_verify_tools.results | selectattr('rc', 'ne', 0) | map(attribute='item') | join(', ') }}.
+      Частина функцій платформи (імпорт прайсів, обробка фото, бекап) без них не працює.
+  when: sol_verify_tools.results | selectattr('rc', 'ne', 0) | list | length > 0
+
+- name: SELinux у enforcing
+  ansible.builtin.debug:
+    msg: >-
+      SELinux у режимі enforcing. Стек у цьому режимі не перевірявся:
+      знадобляться власні контексти для сокета PHP-FPM і теки сайту.
+  when: ansible_selinux.status | default('disabled') == 'enabled' and ansible_selinux.mode | default('') == 'enforcing'
+
+- name: Підсумок
+  ansible.builtin.debug:
+    msg:
+      - "PHP:         {{ sol_verify_php.stdout_lines[0] }}"
+      - "MariaDB:     {{ sol_verify_mariadb.stdout | default('не встановлено') }}"
+      - "nginx:       {{ sol_verify_nginx.stderr_lines[-1] | default('') }}"
+      - "Meilisearch: {{ sol_meilisearch_version if sol_meilisearch_manage else 'не керується цією роллю' }}"
+      - "RAM:         {{ ansible_memtotal_mb }} MB, CPU: {{ ansible_processor_vcpus }}"
+      - "Сайт:        {{ sol_site_domain }} → {{ sol_site_webroot }}"

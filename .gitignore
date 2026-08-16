@@ -1,0 +1,7 @@
+# Робочий інвентар із реальними хостами й реквізитами — не в git.
+inventory.yml
+inventory.*.yml
+!inventory.example.yml
+
+*.retry
+.vault_pass

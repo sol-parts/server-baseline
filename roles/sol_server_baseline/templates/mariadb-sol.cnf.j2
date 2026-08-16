@@ -1,0 +1,23 @@
+# Налаштування MariaDB, потрібні платформі sol.parts.
+# Керується Ansible-роллю sol_server_baseline — правки руками буде затерто.
+
+[mysqld]
+# Немає STRICT_TRANS_TABLES: легасі-шар каталогу подекуди покладається на м'яку
+# поведінку (обрізання задовгих значень, неявні дефолти). Зі строгим режимом
+# такий запис перетворюється на помилку і ламає імпорт прайсів.
+sql_mode = ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+
+# Пошук по каталогу шукає короткі токени: артикули, коди й позначення на
+# кшталт «M8» або «R15». Дефолтні 4 символи їх просто не індексують.
+ft_min_word_len = 1
+ft_stopword_file = ""
+innodb_ft_min_token_size = 1
+
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
+
+# Прайси й вивантаження каталогу йдуть великими пакетами.
+max_allowed_packet = {{ sol_mariadb_max_allowed_packet }}
+
+innodb_buffer_pool_size = {{ sol_mariadb_innodb_buffer_pool_size }}
+innodb_file_per_table = 1

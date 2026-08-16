@@ -1,0 +1,81 @@
+---
+- name: Перевірити пошту для Let's Encrypt
+  ansible.builtin.assert:
+    that:
+      - sol_letsencrypt_email | length > 0
+    fail_msg: "Для sol_letsencrypt_enabled=true задайте sol_letsencrypt_email."
+
+- name: certbot
+  ansible.builtin.dnf:
+    name: certbot
+    state: present
+
+# Валідація йде через webroot: nginx уже слухає 80 і віддає /.well-known/
+# із теки ACME, тому зупиняти сайт на час випуску не треба.
+- name: A-запис домену вказує на цей сервер
+  ansible.builtin.command: "getent ahostsv4 {{ sol_site_domain }}"
+  changed_when: false
+  failed_when: false
+  register: sol_dns_check
+
+- name: Чи можна випускати сертифікат
+  ansible.builtin.set_fact:
+    sol_dns_points_here: >-
+      {{ (sol_letsencrypt_force | bool)
+         or (ansible_default_ipv4.address is defined
+             and ansible_default_ipv4.address in sol_dns_check.stdout) }}
+
+- name: Домен ще не резолвиться на цей сервер
+  ansible.builtin.debug:
+    msg: >-
+      {{ sol_site_domain }} не резолвиться в {{ ansible_default_ipv4.address | default('IP цього сервера') }}.
+      Випуск сертифіката пропущено: спершу переведіть DNS, потім запустіть роль
+      ще раз із --tags tls,nginx. Якщо сервер за NAT або плаваючою адресою і
+      перевірка дає хибний «ні» — sol_letsencrypt_force=true.
+  when: not (sol_dns_points_here | bool)
+
+- name: Випустити сертифікат
+  when: sol_dns_points_here | bool
+  block:
+    - name: certbot certonly (webroot)
+      ansible.builtin.command: >-
+        certbot certonly -n --webroot -w {{ sol_acme_webroot }}
+        -m {{ sol_letsencrypt_email }} --agree-tos
+        {% for domain in sol_letsencrypt_domains %}-d {{ domain }} {% endfor %}
+        --cert-name {{ sol_site_domain }}
+      register: sol_certbot
+      changed_when: "'Certificate not yet due for renewal' not in sol_certbot.stdout"
+
+    - name: Перечитати наявність сертифіката
+      ansible.builtin.stat:
+        path: "/etc/letsencrypt/live/{{ sol_site_domain }}/privkey.pem"
+      register: sol_tls_cert_after
+
+    - name: Оновити ознаку TLS
+      ansible.builtin.set_fact:
+        sol_tls_available: "{{ sol_tls_cert_after.stat.exists }}"
+
+    # Vhost перегенеровуємо одразу: до випуску він був лише на 80-му порту.
+    - name: Перегенерувати vhost із TLS
+      ansible.builtin.template:
+        src: vhost.conf.j2
+        dest: "/etc/nginx/conf.d/{{ sol_site_domain }}.conf"
+        mode: "0644"
+      notify: Reload nginx
+
+    # Пакет certbot приносить власний таймер оновлення — окремий крон не потрібен,
+    # лишається додати перезавантаження nginx після успішного продовження.
+    - name: Хук перезавантаження nginx після оновлення сертифіката
+      ansible.builtin.copy:
+        dest: /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+        content: |
+          #!/bin/sh
+          systemctl reload nginx
+        mode: "0755"
+
+    - name: Увімкнути таймер оновлення сертифікатів
+      ansible.builtin.systemd_service:
+        name: certbot-renew.timer
+        enabled: true
+        state: started
+      failed_when: false

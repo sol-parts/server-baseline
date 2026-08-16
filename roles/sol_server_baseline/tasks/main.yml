@@ -1,0 +1,75 @@
+---
+- name: Перевірити обов'язкові змінні
+  ansible.builtin.assert:
+    that:
+      - sol_site_domain | length > 0
+      - sol_app_name | length > 0
+      - sol_site_user | length > 0
+    fail_msg: >-
+      Задайте sol_site_domain, sol_app_name і sol_site_user
+      (див. inventory.example.yml).
+  tags: always
+
+# Роль писана й перевірена на AlmaLinux 9: репозиторії Remi/MariaDB, імена
+# пакетів і шляхи SCL — саме звідти. Умова ширша (усе сімейство RHEL 9), бо
+# технічно там те саме, але за межами AlmaLinux досвіду немає. На чужому
+# сімействі роль не «частково спрацює», а зупиниться на першому dnf.
+- name: Перевірити сімейство ОС
+  ansible.builtin.assert:
+    that:
+      - ansible_os_family == 'RedHat'
+      - ansible_distribution_major_version is version('9', '>=')
+    fail_msg: >-
+      Потрібен AlmaLinux 9 або інший дистрибутив сімейства RHEL 9.
+      Виявлено: {{ ansible_distribution }} {{ ansible_distribution_version }}.
+      Вимоги до сервера, якщо ставите вручну на іншій ОС — docs/requirements.md.
+  tags: always
+
+- name: Система та базові пакети
+  ansible.builtin.include_tasks: system.yml
+  tags: system
+
+- name: Користувач і теки сайту
+  ansible.builtin.include_tasks: site.yml
+  tags: site
+
+- name: PHP
+  ansible.builtin.include_tasks: php.yml
+  tags: php
+
+- name: MariaDB
+  ansible.builtin.include_tasks: mariadb.yml
+  when: sol_mariadb_manage | bool
+  tags: mariadb
+
+- name: Meilisearch
+  ansible.builtin.include_tasks: meilisearch.yml
+  when: sol_meilisearch_manage | bool
+  tags: meilisearch
+
+- name: nginx
+  ansible.builtin.include_tasks: nginx.yml
+  tags: nginx
+
+- name: TLS-сертифікат
+  ansible.builtin.include_tasks: tls.yml
+  when: sol_letsencrypt_enabled | bool
+  tags: tls
+
+- name: firewalld
+  ansible.builtin.include_tasks: firewall.yml
+  when: sol_firewalld_manage | bool
+  tags: firewall
+
+- name: Ротація логів
+  ansible.builtin.include_tasks: logrotate.yml
+  tags: logrotate
+
+- name: Runtime магазину (обгортка console, воркери Messenger)
+  ansible.builtin.include_tasks: runtime.yml
+  when: sol_runtime_enabled | bool
+  tags: runtime
+
+- name: Перевірка результату
+  ansible.builtin.include_tasks: verify.yml
+  tags: verify

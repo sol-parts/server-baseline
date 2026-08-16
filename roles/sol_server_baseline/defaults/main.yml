@@ -1,0 +1,139 @@
+---
+# Значення за замовчуванням ролі sol_server_baseline.
+# Обов'язкові до заповнення (перевіряються в tasks/main.yml): sol_site_domain,
+# sol_site_user, sol_app_name і — якщо керуємо відповідним сервісом — реквізити
+# БД та master key Meilisearch.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Сайт: домен, системний користувач, розкладка тек
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Основний домен магазину, напр. shop.example.com (без схеми і без www).
+sol_site_domain: ""
+
+# Коротке ім'я магазину. Ним називаються пул PHP-FPM, правило ротації логів і
+# тека згенерованих файлів (карта сайту, кеш) — тому воно має збігатися з тим,
+# яке піде в конфігурацію магазину. Латиниця, [a-z0-9_].
+sol_app_name: ""
+
+# Непривілейований користувач, від якого працює PHP-FPM, воркери й крон.
+# nginx читає статику через цю ж групу, тому вона потрібна і йому.
+sol_site_user: ""
+sol_site_group: solweb
+
+# Розкладка тек. Дефолт збігається з тим, який використовує деплой sol.parts:
+# лишивши його як є, ви спрощуєте передачу сервера на супровід і назад.
+sol_site_home: "/var/www/vhosts/{{ sol_site_domain }}"
+sol_site_root: "{{ sol_site_home }}/httpdocs"
+sol_site_webroot: "{{ sol_site_root }}/public"
+sol_site_logs: "{{ sol_site_home }}/logs"
+sol_acme_webroot: "{{ sol_site_home }}/system/letsencrypt"
+
+sol_timezone: Europe/Kyiv
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHP (SCL-збірка Remi: паралельна до системного PHP, не конфліктує з ним)
+# ─────────────────────────────────────────────────────────────────────────────
+
+sol_php_version: php82
+
+sol_php_memory_limit: 512M
+sol_php_max_execution_time: 60
+sol_php_upload_max_filesize: 300M
+sol_php_post_max_size: 300M
+
+# Дефолт PHP (1000) замалий: форма налаштувань адмінки надсилає понад тисячу
+# полів, і PHP мовчки обріже $_POST — збереження «провалиться» без помилки.
+sol_php_max_input_vars: 5000
+
+sol_php_opcache_memory: 256
+sol_php_opcache_max_files: 20000
+
+# Пул FPM. ondemand + max_children під обсяг RAM: один воркер платформи
+# у піку займає до memory_limit, тож 16 × 512M — це стеля 8 ГБ.
+sol_php_fpm_max_children: 16
+sol_php_fpm_process_idle_timeout: 10s
+sol_php_fpm_max_requests: 500
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MariaDB
+# ─────────────────────────────────────────────────────────────────────────────
+
+sol_mariadb_manage: true
+sol_mariadb_version: "10.6"
+
+sol_db_name: ""
+sol_db_user: ""
+sol_db_password: ""
+
+# Головний споживач RAM у MariaDB. Орієнтир — 25–50 % пам'яті сервера,
+# з урахуванням того, що ту саму пам'ять ділять Meilisearch і PHP-FPM.
+sol_mariadb_innodb_buffer_pool_size: 1G
+sol_mariadb_max_allowed_packet: 256M
+
+# ─────────────────────────────────────────────────────────────────────────────
+# nginx
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Репозиторій nginx.org (stable). Дистрибутивний nginx 1.20 з AppStream теж
+# запуститься, але не розуміє директиви `http2 on` і вже поза підтримкою.
+sol_nginx_use_upstream_repo: true
+
+sol_nginx_client_max_body_size: 300m
+sol_nginx_hsts: true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Meilisearch — пошук по каталогу. Без нього вітрина не шукає товари.
+# ─────────────────────────────────────────────────────────────────────────────
+
+sol_meilisearch_manage: true
+sol_meilisearch_version: "1.52.0"
+
+# Обов'язковий, щонайменше 16 байтів: у production-режимі Meilisearch без
+# master key не стартує.
+sol_meilisearch_master_key: ""
+
+# Локально зібраний бінарник (шлях на керуючій машині). Потрібен, якщо
+# офіційний реліз не запускається через версію glibc — див. docs/requirements.md.
+sol_meilisearch_binary_src: ""
+
+sol_meilisearch_http_addr: "127.0.0.1:7700"
+sol_meilisearch_payload_limit: "150 MB"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TLS (Let's Encrypt, webroot)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Вмикати лише коли A/AAAA-записи домену вже вказують на цей сервер.
+sol_letsencrypt_enabled: false
+sol_letsencrypt_email: ""
+sol_letsencrypt_domains:
+  - "{{ sol_site_domain }}"
+  - "www.{{ sol_site_domain }}"
+
+# Перед випуском роль перевіряє, що домен резолвиться в IP цього сервера.
+# За плаваючою адресою або NAT перевірка дає хибний «ні» — тоді true її обходить.
+sol_letsencrypt_force: false
+
+# ─────────────────────────────────────────────────────────────────────────────
+# firewalld
+# ─────────────────────────────────────────────────────────────────────────────
+
+sol_firewalld_manage: true
+sol_firewalld_services:
+  - ssh
+  - http
+  - https
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Runtime магазину: обгортка bin/console і воркери Messenger.
+# Має сенс лише після того, як код магазину вже лежить у sol_site_root.
+# ─────────────────────────────────────────────────────────────────────────────
+
+sol_runtime_enabled: false
+sol_console_wrapper: /usr/local/bin/syli
+sol_messenger_transports:
+  - async
+  - scheduler_default
+sol_messenger_time_limit: 3600
+sol_messenger_memory_limit: 512M

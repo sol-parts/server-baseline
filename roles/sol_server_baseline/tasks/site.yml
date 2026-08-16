@@ -1,0 +1,31 @@
+---
+- name: Група {{ sol_site_group }}
+  ansible.builtin.group:
+    name: "{{ sol_site_group }}"
+    state: present
+
+- name: Користувач {{ sol_site_user }}
+  ansible.builtin.user:
+    name: "{{ sol_site_user }}"
+    group: "{{ sol_site_group }}"
+    home: "{{ sol_site_home }}"
+    shell: /bin/bash
+    create_home: true
+
+# 0710 на домашній теці: усередину заходить лише власник і процеси групи
+# (nginx додано до неї нижче), решта користувачів сервера — ні.
+- name: Теки сайту
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    owner: "{{ sol_site_user }}"
+    group: "{{ sol_site_group }}"
+    state: directory
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ sol_site_home }}", mode: "0710" }
+    - { path: "{{ sol_site_logs }}", mode: "0750" }
+    - { path: "{{ sol_site_root }}", mode: "0755" }
+    - { path: "{{ sol_site_webroot }}", mode: "0755" }
+    - { path: "{{ sol_acme_webroot }}", mode: "0755" }
+# Користувача nginx до групи сайту додає tasks/nginx.yml — на цьому кроці
+# пакета nginx на сервері ще може не бути.

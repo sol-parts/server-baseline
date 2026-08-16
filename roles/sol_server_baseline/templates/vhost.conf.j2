@@ -1,0 +1,204 @@
+
+# Vhost {{ sol_site_domain }}.
+# Керується Ansible-роллю sol_server_baseline — правки руками буде затерто.
+#
+# Тут лише те, без чого магазин не працює правильно. Захист від ботів,
+# rate limiting, WAF, CDN — свідомо поза цим файлом: такі речі налаштовують
+# під конкретний трафік, а не «за замовчуванням».
+
+{% set php_socket = '/var/opt/remi/' ~ sol_php_version ~ '/run/php-fpm/' ~ sol_app_name ~ '.sock' %}
+{% if sol_tls_available | default(false) %}
+server {
+    listen 80;
+    listen [::]:80;
+    server_name {{ sol_site_domain }} www.{{ sol_site_domain }};
+
+    # Продовження сертифіката має працювати і на 80-му порту, тому ACME-локація
+    # стоїть вище за редирект.
+    location ^~ /.well-known/acme-challenge/ {
+        default_type "text/plain";
+        root {{ sol_acme_webroot }};
+    }
+
+    location / {
+        return 301 https://{{ sol_site_domain }}$request_uri;
+    }
+}
+{% endif %}
+
+server {
+{% if sol_tls_available | default(false) %}
+    listen 443 ssl;
+    listen [::]:443 ssl;
+{% if sol_nginx_use_upstream_repo | bool %}
+    http2 on;
+{% endif %}
+
+    ssl_certificate         /etc/letsencrypt/live/{{ sol_site_domain }}/fullchain.pem;
+    ssl_certificate_key     /etc/letsencrypt/live/{{ sol_site_domain }}/privkey.pem;
+    ssl_trusted_certificate /etc/letsencrypt/live/{{ sol_site_domain }}/fullchain.pem;
+
+    # Профіль Mozilla «intermediate»: сучасні шифри без втрати сумісності
+    # з реальними браузерами. https://ssl-config.mozilla.org/
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+    ssl_dhparam /etc/nginx/dhparams.pem;
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_tickets off;
+{% if sol_nginx_hsts | bool %}
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+{% endif %}
+{% else %}
+    listen 80;
+    listen [::]:80;
+
+    # Сертифіката ще немає: сайт віддається по HTTP. Після випуску (--tags tls)
+    # цей файл перегенерується з HTTPS і редиректом з 80-го порту.
+{% endif %}
+
+    server_name {{ sol_site_domain }} www.{{ sol_site_domain }};
+
+    root {{ sol_site_webroot }};
+    index index.php;
+    charset utf-8;
+
+    access_log {{ sol_site_logs }}/nginx-access.log sol_main;
+    error_log {{ sol_site_logs }}/nginx-error.log;
+
+    server_tokens off;
+    add_header X-Frame-Options SAMEORIGIN always;
+
+    # Імпорт прайсів і вивантаження фото з адмінки йдуть звичайним POST.
+    client_max_body_size {{ sol_nginx_client_max_body_size }};
+
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_min_length 256;
+    gzip_types application/atom+xml application/javascript application/json application/ld+json application/manifest+json application/rss+xml application/xml font/otf font/ttf image/svg+xml text/css text/javascript text/plain text/xml;
+
+    location ^~ /.well-known/acme-challenge/ {
+        default_type "text/plain";
+        root {{ sol_acme_webroot }};
+    }
+
+    # Карта сайту, згенерована консольною командою. Якщо файлів ще немає,
+    # try_files віддає запит застосунку — без 404 на порожньому сервері.
+    location ~ ^/sitemap(\.xml|/[^/]+)$ {
+        root {{ sol_site_root }}/var/cache_app/{{ sol_app_name }};
+        rewrite ^/sitemap\.xml$ /sitemap/root.xml break;
+        gzip_static on;
+        try_files $uri /index.php?$args;
+    }
+
+    # Складені асети мають хеш у назві, тому кешуються назавжди. Проміжний стан
+    # деплою (файл ще не приїхав) не має закешуватись як 404 — звідси @assets_missing.
+    location ~* ^/assets/.+\.(js|css|jpg|jpeg|png|webp|avif|gif|svg|ico|ttf|woff|woff2)$ {
+        error_page 404 = @assets_missing;
+        expires 730d;
+        add_header Cache-Control "public, max-age=63072000, immutable" always;
+    }
+
+    location @assets_missing {
+        add_header Cache-Control "no-store, must-revalidate" always;
+        return 404;
+    }
+
+    # Фото каталогу зберігаються у двох форматах. Запит .webp, якого ще немає,
+    # обслуговує .jpg; запит .jpg за наявності .webp — редиректиться на легший файл.
+    location ~* \.webp$ {
+        set $jpg_uri $uri;
+        if ($jpg_uri ~ "^(.+)\.webp$") {
+            set $jpg_uri $1.jpg;
+        }
+        if (-f $document_root$jpg_uri) {
+            rewrite ^ $jpg_uri last;
+        }
+        expires 3d;
+    }
+
+    location ~* \.jpg$ {
+        set $webp_uri $uri;
+        if ($webp_uri ~ "^(.+)\.jpg$") {
+            set $webp_uri $1.webp;
+        }
+        if (-f $document_root$webp_uri) {
+            rewrite ^ $webp_uri permanent;
+        }
+        expires 3d;
+    }
+
+    location ~* \.(jpeg|png|gif|svg|avif|ico|js|css|mp3|mp4|ttf|woff|woff2)$ {
+        expires 3d;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.php?$args;
+    }
+
+    # Адмінка вантажить великі файли (прайси, фото пакетом) — їй потрібні
+    # довші таймаути, ніж вітрині.
+    location ~* /administrator/ {
+        fastcgi_send_timeout 4m;
+        fastcgi_read_timeout 4m;
+        send_timeout 4m;
+        client_body_timeout 4m;
+
+        fastcgi_split_path_info ^(.+\.php)(/.+)$;
+        fastcgi_pass unix:{{ php_socket }};
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root/index.php;
+        fastcgi_param DOCUMENT_ROOT $document_root;
+        fastcgi_param HTTP_HOST $host;
+    }
+
+    # internal: до PHP доходять лише внутрішні перенаправлення з try_files,
+    # тобто ззовні не можна виконати довільний .php-файл із вебруту.
+    location ~ ^/index\.php(/|$) {
+        fastcgi_read_timeout 60;
+
+        fastcgi_split_path_info ^(.+\.php)(/.+)$;
+        fastcgi_pass unix:{{ php_socket }};
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_param DOCUMENT_ROOT $document_root;
+        fastcgi_param HTTP_HOST $host;
+
+        internal;
+    }
+
+    location ~ (composer\.json|composer\.lock|makefile) {
+        return 404;
+    }
+
+    location ^~ /vendor/ {
+        return 404;
+    }
+
+    location ~ \.(env|php|lock|ini|md|gitignore|git|bat|yaml|yml)$ {
+        return 404;
+    }
+
+    # Сторінки помилок платформи. Поки їх не згенеровано, nginx віддає власні —
+    # це очікувана деградація, а не збій.
+    error_page 403 /403.html;
+    location = /403.html {
+        root {{ sol_site_root }}/var/error_docs;
+        internal;
+    }
+
+    error_page 404 /404.html;
+    location = /404.html {
+        root {{ sol_site_root }}/var/error_docs;
+        internal;
+    }
+
+    error_page 500 502 503 504 /50x.html;
+    location = /50x.html {
+        root {{ sol_site_root }}/var/error_docs;
+        internal;
+    }
+}

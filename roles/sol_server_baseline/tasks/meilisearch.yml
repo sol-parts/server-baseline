@@ -1,0 +1,135 @@
+---
+# Без ключа сервіс встановиться, але одразу піде в цикл рестартів, і провал
+# вилізе аж на очікуванні порту — без натяку на причину.
+- name: Перевірити master key
+  ansible.builtin.assert:
+    that:
+      - (sol_meilisearch_master_key | default('', true) | string | length) >= 16
+    fail_msg: >-
+      sol_meilisearch_master_key має бути щонайменше 16 байтів:
+      у production-режимі Meilisearch без нього не стартує.
+
+- name: Користувач meilisearch
+  ansible.builtin.user:
+    name: meilisearch
+    home: /var/lib/meilisearch
+    system: true
+    shell: /sbin/nologin
+
+- name: Яка версія стоїть зараз
+  ansible.builtin.command: /usr/local/bin/meilisearch -V
+  changed_when: false
+  failed_when: false
+  register: sol_meili_current
+
+- name: Порівняти з цільовою версією
+  ansible.builtin.set_fact:
+    sol_meili_installed: >-
+      {{ sol_meili_current.stdout | default('') | regex_search('[0-9]+\.[0-9]+\.[0-9]+') | default('', true) }}
+
+- name: Чи потрібна установка
+  ansible.builtin.set_fact:
+    sol_meili_install: "{{ sol_meili_installed != sol_meilisearch_version }}"
+
+- name: Встановити Meilisearch {{ sol_meilisearch_version }}
+  when: sol_meili_install | bool
+  block:
+    - name: Скопіювати локально зібраний бінарник
+      ansible.builtin.copy:
+        src: "{{ sol_meilisearch_binary_src }}"
+        dest: /tmp/meilisearch
+        mode: "0755"
+      when: sol_meilisearch_binary_src | length > 0
+
+    - name: Завантажити офіційний реліз
+      ansible.builtin.get_url:
+        url: >-
+          https://github.com/meilisearch/meilisearch/releases/download/v{{ sol_meilisearch_version }}/meilisearch-linux-{{ 'amd64' if ansible_architecture == 'x86_64' else 'aarch64' }}
+        dest: /tmp/meilisearch
+        mode: "0755"
+        force: true
+      when: sol_meilisearch_binary_src | length == 0
+
+    # Перевіряємо ДО заміни робочого бінарника: офіційні релізи зібрані під
+    # новіший glibc, ніж дає EL9, і там просто не запускаються. Інакше в
+    # /usr/local/bin лишиться непрацездатний файл, і сервіс ляже на першому
+    # ж рестарті — хоч зараз ще й працює.
+    - name: Перевірити, що бінарник запускається
+      ansible.builtin.command: /tmp/meilisearch -V
+      changed_when: false
+      register: sol_meili_new
+      failed_when: sol_meilisearch_version not in sol_meili_new.stdout
+
+    - name: Перемістити в /usr/local/bin
+      ansible.builtin.command: mv /tmp/meilisearch /usr/local/bin/meilisearch
+      changed_when: true
+
+  rescue:
+    - name: Пояснити, чому Meilisearch не встановився
+      ansible.builtin.fail:
+        msg: >-
+          Не вдалося встановити Meilisearch {{ sol_meilisearch_version }}.
+          Найчастіша причина на EL9 — офіційний реліз зібраний під новіший glibc,
+          ніж є в системі, і бінарник не стартує. Варіанти: зібрати Meilisearch
+          із джерел на цій же ОС і передати шлях у sol_meilisearch_binary_src,
+          узяти старішу версію, або запустити пошук у контейнері.
+          Деталі — docs/requirements.md, розділ «Meilisearch».
+
+# Прапорець міграції бази під нову версію змінював назву між релізами —
+# питаємо в самого бінарника, замість того щоб вгадувати.
+- name: Яким прапорцем бінарник мігрує базу
+  ansible.builtin.shell: >-
+    set -o pipefail;
+    /usr/local/bin/meilisearch --help | grep -oE -- '--upgrade-db|--experimental-dumpless-upgrade' | head -n1
+  args:
+    executable: /bin/bash
+  changed_when: false
+  failed_when: false
+  register: sol_meili_flag
+
+- name: Запам'ятати прапорець
+  ansible.builtin.set_fact:
+    sol_meili_upgrade_flag: "{{ sol_meili_flag.stdout | default('') | trim }}"
+
+- name: Теки Meilisearch
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    owner: meilisearch
+    group: meilisearch
+    state: directory
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "/var/lib/meilisearch", mode: "0750" }
+    - { path: "/var/lib/meilisearch/data", mode: "0755" }
+    - { path: "/var/lib/meilisearch/dumps", mode: "0755" }
+    - { path: "/var/lib/meilisearch/snapshots", mode: "0755" }
+
+- name: Конфіг /etc/meilisearch.toml
+  ansible.builtin.template:
+    src: meilisearch.toml.j2
+    dest: /etc/meilisearch.toml
+    owner: root
+    group: meilisearch
+    # Файл містить master key — читає лише сам сервіс.
+    mode: "0640"
+  notify: Restart Meilisearch
+
+- name: Юніт meilisearch.service
+  ansible.builtin.template:
+    src: meilisearch.service.j2
+    dest: /etc/systemd/system/meilisearch.service
+    mode: "0644"
+  notify: Restart Meilisearch
+
+- name: Увімкнути й запустити Meilisearch
+  ansible.builtin.systemd_service:
+    name: meilisearch
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Дочекатися, поки Meilisearch почне слухати порт
+  ansible.builtin.wait_for:
+    host: "{{ sol_meilisearch_http_addr.split(':')[0] }}"
+    port: "{{ sol_meilisearch_http_addr.split(':')[1] | int }}"
+    timeout: 300

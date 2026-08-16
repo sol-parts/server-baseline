@@ -1,0 +1,22 @@
+[Unit]
+Description=Messenger worker ({{ item }})
+After=network.target
+
+[Service]
+User={{ sol_site_user }}
+Group={{ sol_site_group }}
+
+# --time-limit і --memory-limit змушують воркер завершуватись самостійно, а
+# systemd піднімає його наново: так процес не накопичує пам'ять і підхоплює
+# оновлений код без окремої команди. --failure-limit зупиняє воркер, який
+# «крутить» одну й ту саму помилку.
+ExecStart={{ sol_console_wrapper }} messenger:consume {{ item }} \
+    --time-limit={{ sol_messenger_time_limit }} \
+    --memory-limit={{ sol_messenger_memory_limit }} \
+    --failure-limit=5
+
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,46 @@
+---
+# Скопіюйте у inventory.yml і заповніть під свій сервер.
+# Паролі тримайте в ansible-vault, а не у відкритому файлі:
+#   ansible-vault encrypt_string 'пароль' --name 'sol_db_password'
+
+sol_shop:
+  hosts:
+    shop:
+      ansible_host: 203.0.113.10
+      ansible_user: root
+      # Нестандартний порт SSH, якщо він у вас змінений:
+      # ansible_port: 22
+
+  vars:
+    # ─── Обов'язкове ───
+    sol_site_domain: shop.example.com
+    # Ім'я інстансу платформи: латиниця, [a-z0-9_]. Погоджується з sol.parts
+    # перед розгортанням — воно ж використовується в конфігурації магазину.
+    sol_app_name: shop
+    sol_site_user: u_shop
+
+    # ─── База даних ───
+    sol_db_name: shop
+    sol_db_user: shop
+    sol_db_password: "змініть-мене"
+
+    # ─── Пошук ───
+    # Довільний рядок від 16 байтів. Той самий ключ піде в конфігурацію магазину.
+    sol_meilisearch_master_key: "змініть-мене-мінімум-16-байтів"
+
+    # ─── Розмір сервера ───
+    # Три головні споживачі пам'яті ділять RAM машини: MariaDB (buffer pool),
+    # Meilisearch (індекси) і PHP-FPM (max_children × memory_limit).
+    # Приклад для 16 ГБ:
+    sol_mariadb_innodb_buffer_pool_size: 4G
+    sol_php_fpm_max_children: 16
+    sol_php_memory_limit: 512M
+
+    # ─── TLS ───
+    # Вмикати після того, як A/AAAA-записи домену вже вказують на цей сервер.
+    sol_letsencrypt_enabled: false
+    sol_letsencrypt_email: admin@example.com
+
+    # ─── Runtime магазину ───
+    # Вмикати після того, як код магазину розгорнуто в sol_site_root.
+    sol_runtime_enabled: false

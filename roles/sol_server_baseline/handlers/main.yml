@@ -1,0 +1,35 @@
+---
+- name: Restart PHP-FPM
+  ansible.builtin.systemd_service:
+    name: "{{ sol_php_version }}-php-fpm"
+    state: restarted
+    daemon_reload: true
+
+- name: Restart MariaDB
+  ansible.builtin.systemd_service:
+    name: mariadb
+    state: restarted
+    daemon_reload: true
+
+- name: Restart Meilisearch
+  ansible.builtin.systemd_service:
+    name: meilisearch
+    state: restarted
+    daemon_reload: true
+
+# Спершу перевірка конфігу, і лише потім reload: помилка в конфізі не має
+# лишати сервіс без робочої конфігурації.
+- name: Reload nginx
+  ansible.builtin.command: nginx -t
+  changed_when: false
+  notify: Reload nginx service
+
+- name: Reload nginx service
+  ansible.builtin.systemd_service:
+    name: nginx
+    state: reloaded
+
+- name: Reload firewalld
+  ansible.builtin.systemd_service:
+    name: firewalld
+    state: restarted

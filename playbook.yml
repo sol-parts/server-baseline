@@ -1,0 +1,17 @@
+---
+# Базове налаштування сервера під магазин на платформі sol.parts.
+#
+#   ansible-playbook -i inventory.yml playbook.yml
+#
+# Окремі частини — за тегами:
+#   --tags system,site,php,mariadb,meilisearch,nginx,tls,firewall,logrotate,runtime,verify
+#
+# Перевірити готовий сервер, нічого не змінюючи:
+#   ansible-playbook -i inventory.yml playbook.yml --tags verify
+
+- name: sol.parts server baseline
+  hosts: sol_shop
+  become: true
+
+  roles:
+    - role: sol_server_baseline

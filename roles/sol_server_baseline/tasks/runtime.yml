@@ -1,0 +1,47 @@
+---
+# Обгортка, щоб консольні команди магазину запускались потрібною версією PHP,
+# з будь-якої теки і без згадки повного шляху в крон-записах.
+- name: Обгортка {{ sol_console_wrapper }}
+  ansible.builtin.copy:
+    dest: "{{ sol_console_wrapper }}"
+    content: |
+      #!/bin/bash
+      exec /usr/local/bin/php {{ sol_site_root }}/bin/console "$@"
+    mode: "0755"
+
+# Асинхронні задачі магазину (листи, SMS, обмін із зовнішніми системами,
+# планувальник) виконують воркери Messenger. Без них черга просто накопичується.
+- name: Юніти воркерів Messenger
+  ansible.builtin.template:
+    src: messenger-worker.service.j2
+    dest: "/etc/systemd/system/sol-messenger-{{ item }}.service"
+    mode: "0644"
+  loop: "{{ sol_messenger_transports }}"
+  register: sol_worker_units
+
+- name: Увімкнути й запустити воркери
+  ansible.builtin.systemd_service:
+    name: "sol-messenger-{{ item }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  loop: "{{ sol_messenger_transports }}"
+
+# Юніт із --time-limit завершується сам і піднімається systemd-ом, тож
+# «перезапустити воркери» після оновлення коду — це саме restart.
+- name: Перезапустити воркери після зміни юнітів
+  ansible.builtin.systemd_service:
+    name: "sol-messenger-{{ item }}"
+    state: restarted
+  loop: "{{ sol_messenger_transports }}"
+  when: sol_worker_units is changed
+
+- name: Крон без поштових звітів
+  ansible.builtin.cron:
+    name: "{{ item.name }}"
+    job: "{{ item.job }}"
+    env: true
+    user: "{{ sol_site_user }}"
+  loop:
+    - { name: "SHELL", job: "/bin/bash" }
+    - { name: "MAILTO", job: "" }

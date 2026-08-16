@@ -1,0 +1,30 @@
+; Пул PHP-FPM сайту {{ sol_site_domain }}.
+; Керується Ansible-роллю sol_server_baseline — правки руками буде затерто.
+
+[{{ sol_app_name }}]
+
+user = {{ sol_site_user }}
+group = {{ sol_site_group }}
+
+listen = /var/opt/remi/{{ sol_php_version }}/run/php-fpm/{{ sol_app_name }}.sock
+; nginx — основний споживач; користувач сайту потрібен, щоб консольні команди
+; деплою могли достукатись до FPM (скидання кешу байткоду).
+listen.acl_users = nginx,{{ sol_site_user }}
+
+; ondemand: воркер піднімається під запит і зникає в простої. Для одного сайту
+; на сервері це дешевше за постійний пул, а холодний старт непомітний.
+pm = ondemand
+pm.max_children = {{ sol_php_fpm_max_children }}
+pm.process_idle_timeout = {{ sol_php_fpm_process_idle_timeout }}
+
+; Ротація воркера кожні N запитів — страховка від процесу, що «залип» зі старим
+; станом після оновлення коду.
+pm.max_requests = {{ sol_php_fpm_max_requests }}
+
+php_admin_value[error_log] = {{ sol_site_logs }}/php-fpm-error.log
+php_admin_flag[log_errors] = on
+
+php_value[session.save_handler] = files
+php_value[session.save_path] = /var/opt/remi/{{ sol_php_version }}/lib/php/session
+
+env[HOME] = {{ sol_site_root }}

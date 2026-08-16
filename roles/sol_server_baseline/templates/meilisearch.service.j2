@@ -1,0 +1,29 @@
+[Unit]
+Description=Meilisearch
+Documentation=https://www.meilisearch.com/docs
+After=network.target
+
+[Service]
+Type=simple
+User=meilisearch
+Group=meilisearch
+{% if sol_meili_upgrade_flag | default('') | length > 0 %}
+# {{ sol_meili_upgrade_flag }} дозволяє мігрувати наявну базу під нову версію
+# без експорту й імпорту дампа. Прапорець визначено з `meilisearch --help`,
+# бо між релізами він змінював назву.
+ExecStart=/usr/local/bin/meilisearch --config-file-path /etc/meilisearch.toml {{ sol_meili_upgrade_flag }}
+{% else %}
+ExecStart=/usr/local/bin/meilisearch --config-file-path /etc/meilisearch.toml
+{% endif %}
+Restart=on-failure
+RestartSec=10s
+
+# Ізоляція: сервісу потрібна лише власна тека з даними.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/meilisearch
+
+[Install]
+WantedBy=multi-user.target

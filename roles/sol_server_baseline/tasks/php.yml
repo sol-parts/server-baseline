@@ -1,0 +1,116 @@
+---
+# PHP ставимо зі SCL-репозиторію Remi: він дає потрібну версію окремо від
+# системного PHP і не ламає пакети дистрибутива, які на нього спираються.
+- name: GPG-ключ Remi
+  ansible.builtin.rpm_key:
+    key: https://rpms.remirepo.net/RPM-GPG-KEY-remi2021
+    state: present
+
+- name: Репозиторій Remi
+  ansible.builtin.dnf:
+    name: "https://rpms.remirepo.net/enterprise/remi-release-{{ ansible_distribution_major_version }}.rpm"
+    state: present
+
+- name: PHP {{ sol_php_version }} і розширення
+  ansible.builtin.dnf:
+    name:
+      # Метапакет тягне cli, fpm і common
+      - "{{ sol_php_version }}"
+      - "{{ sol_php_version }}-php-fpm"
+      - "{{ sol_php_version }}-php-cli"
+      - "{{ sol_php_version }}-php-opcache"
+      # Доступ до БД: mysqli для легасі-шару, pdo_mysql для Doctrine
+      - "{{ sol_php_version }}-php-mysqlnd"
+      # Обов'язкові за composer.json платформи
+      - "{{ sol_php_version }}-php-mbstring"
+      - "{{ sol_php_version }}-php-zip"
+      - "{{ sol_php_version }}-php-imap"
+      - "{{ sol_php_version }}-php-imagick"
+      # Ціни й локалі, штрихкоди, PDF
+      - "{{ sol_php_version }}-php-bcmath"
+      - "{{ sol_php_version }}-php-intl"
+      - "{{ sol_php_version }}-php-gd"
+      # Обмін із зовнішніми системами (SOAP-API постачальників і перевізників)
+      - "{{ sol_php_version }}-php-soap"
+      # Локальний кеш процесу
+      - "{{ sol_php_version }}-php-apcu"
+      # libvips — швидке масштабування фото каталогу, ffi потрібен драйверу
+      - "{{ sol_php_version }}-php-ffi"
+      - "{{ sol_php_version }}-php-vips"
+      - vips
+      - vips-tools
+    state: present
+  notify: Restart PHP-FPM
+
+# Дефолтний пул www з RPM тримає простій-воркери, які нікуди не підключені:
+# nginx ходить лише в сокет сайту. Файл ховаємо (FPM читає тільки *.conf).
+- name: Чи є дефолтний пул www
+  ansible.builtin.stat:
+    path: "/etc/opt/remi/{{ sol_php_version }}/php-fpm.d/www.conf"
+  register: sol_php_www_pool
+
+- name: Прибрати дефолтний пул www
+  ansible.builtin.command: >-
+    mv /etc/opt/remi/{{ sol_php_version }}/php-fpm.d/www.conf
+       /etc/opt/remi/{{ sol_php_version }}/php-fpm.d/www.conf.backup
+  when: sol_php_www_pool.stat.exists
+  notify: Restart PHP-FPM
+
+- name: Пул FPM для сайту
+  ansible.builtin.template:
+    src: fpm-pool.conf.j2
+    dest: "/etc/opt/remi/{{ sol_php_version }}/php-fpm.d/{{ sol_app_name }}.conf"
+    mode: "0644"
+  notify: Restart PHP-FPM
+
+# Окремий drop-in замість підміни всього php.ini: оновлення пакета не затирає
+# наші значення, а різниця з дефолтами дистрибутива лишається видимою.
+- name: Налаштування PHP, потрібні платформі
+  ansible.builtin.template:
+    src: php-sol.ini.j2
+    dest: "/etc/opt/remi/{{ sol_php_version }}/php.d/99-sol.ini"
+    mode: "0644"
+  notify: Restart PHP-FPM
+
+- name: Тека сесій під користувачем сайту
+  ansible.builtin.file:
+    path: "/var/opt/remi/{{ sol_php_version }}/lib/php/session/"
+    state: directory
+    owner: "{{ sol_site_user }}"
+    group: "{{ sol_site_group }}"
+    mode: "0770"
+
+- name: Тека drop-in для юніта PHP-FPM
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ sol_php_version }}-php-fpm.service.d"
+    state: directory
+    mode: "0755"
+
+- name: Перезапуск FPM після падіння
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/{{ sol_php_version }}-php-fpm.service.d/override.conf"
+    content: |
+      [Service]
+      Restart=on-failure
+      RestartSec=2s
+    mode: "0644"
+  notify: Restart PHP-FPM
+
+- name: Симлінк /usr/local/bin/php на {{ sol_php_version }}
+  ansible.builtin.file:
+    src: "/opt/remi/{{ sol_php_version }}/root/bin/php"
+    dest: /usr/local/bin/php
+    state: link
+
+- name: Увімкнути й запустити PHP-FPM
+  ansible.builtin.systemd_service:
+    name: "{{ sol_php_version }}-php-fpm"
+    enabled: true
+    state: started
+
+- name: Composer
+  ansible.builtin.get_url:
+    url: https://getcomposer.org/download/latest-stable/composer.phar
+    dest: /usr/local/bin/composer
+    mode: "0755"
+    force: false
