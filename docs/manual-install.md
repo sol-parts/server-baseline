@@ -170,7 +170,70 @@ systemctl enable --now firewalld && firewall-cmd --permanent --add-service={ssh,
 Зразок — `templates/logrotate-site.j2`, покласти у
 `/etc/logrotate.d/sol-$APP`.
 
-## 10. Перевірка
+## 10. Воркери Messenger
+
+Обов'язковий крок після того, як код магазину лежить у теці сайту: без воркерів
+не йде пошта, не працює розклад і не виконуються бекапи (див. «Воркери
+Messenger» у `requirements.md`). Три юніти — по одному на транспорт, зразок —
+`roles/sol_server_baseline/templates/messenger-worker.service.j2`.
+
+Обгортка консолі, щоб юніти й крон не згадували повний шлях і версію PHP:
+
+```bash
+printf '#!/bin/bash\nexec /usr/local/bin/php %s/httpdocs/bin/console "$@"\n' "$SITE_HOME" > /usr/local/bin/syli && chmod 0755 /usr/local/bin/syli
+```
+
+`/etc/systemd/system/sol-messenger-async.service` і
+`sol-messenger-scheduler_default.service` (відрізняються лише ім'ям транспорту):
+
+```ini
+[Unit]
+Description=Messenger worker (async)
+After=network.target
+
+[Service]
+User=$SITE_USER
+Group=solweb
+ExecStart=/usr/local/bin/syli messenger:consume async \
+    --time-limit=3600 --memory-limit=512M --failure-limit=5
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+```
+
+`/etc/systemd/system/sol-messenger-heavy.service` — одна задача на процес,
+після неї воркер виходить і systemd піднімає свіжий; `TimeoutStopSec` дає
+поточній задачі дожити при зупинці юніта:
+
+```ini
+[Unit]
+Description=Messenger worker (heavy)
+After=network.target
+
+[Service]
+User=$SITE_USER
+Group=solweb
+ExecStart=/usr/local/bin/syli messenger:consume heavy \
+    --limit=1 --memory-limit=512M --failure-limit=1
+TimeoutStopSec=36000
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+systemctl daemon-reload
+systemctl enable --now sol-messenger-async sol-messenger-scheduler_default sol-messenger-heavy
+```
+
+Після кожного оновлення коду — `syli messenger:stop-workers`: воркери
+завершують поточне повідомлення, systemd піднімає їх уже з новим кодом.
+
+## 11. Перевірка
 
 ```bash
 bash scripts/check-server.sh

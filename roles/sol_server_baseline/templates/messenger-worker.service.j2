@@ -6,6 +6,15 @@ After=network.target
 User={{ sol_site_user }}
 Group={{ sol_site_group }}
 
+{% if item == 'heavy' %}
+# Одна задача на процес і один процес на сервер: важкі задачі строго послідовні
+# (див. sol_messenger_heavy_* у defaults/main.yml).
+ExecStart={{ sol_console_wrapper }} messenger:consume {{ item }} \
+    --limit={{ sol_messenger_heavy_limit }} \
+    --memory-limit={{ sol_messenger_memory_limit }} \
+    --failure-limit=1
+TimeoutStopSec={{ sol_messenger_heavy_stop_timeout }}
+{% else %}
 # --time-limit і --memory-limit змушують воркер завершуватись самостійно, а
 # systemd піднімає його наново: так процес не накопичує пам'ять і підхоплює
 # оновлений код без окремої команди. --failure-limit зупиняє воркер, який
@@ -14,6 +23,7 @@ ExecStart={{ sol_console_wrapper }} messenger:consume {{ item }} \
     --time-limit={{ sol_messenger_time_limit }} \
     --memory-limit={{ sol_messenger_memory_limit }} \
     --failure-limit=5
+{% endif %}
 
 Restart=always
 RestartSec=30

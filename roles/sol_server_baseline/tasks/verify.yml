@@ -84,6 +84,26 @@
       знадобляться власні контексти для сокета PHP-FPM і теки сайту.
   when: ansible_selinux.status | default('disabled') == 'enabled' and ansible_selinux.mode | default('') == 'enforcing'
 
+# Воркери — не тюнінг, а умова роботи платформи: без них пошта, розклад і
+# бекапи мовчки стоять у черзі. Перевіряємо лише коли runtime увімкнено —
+# до розгортання коду юнітів ще бути не може.
+- name: Стан воркерів Messenger
+  ansible.builtin.command: "systemctl is-active sol-messenger-{{ item }}"
+  changed_when: false
+  failed_when: false
+  register: sol_verify_workers
+  loop: "{{ sol_messenger_transports }}"
+  when: sol_runtime_enabled | bool
+
+- name: Воркери, які не працюють
+  ansible.builtin.assert:
+    that:
+      - sol_verify_workers.results | rejectattr('skipped', 'defined') | selectattr('rc', 'ne', 0) | list | length == 0
+    fail_msg: >-
+      Не запущені воркери: {{ sol_verify_workers.results | rejectattr('skipped', 'defined') | selectattr('rc', 'ne', 0) | map(attribute='item') | join(', ') }}.
+      Без них не відправляється пошта, не працює розклад і бекапи.
+  when: sol_runtime_enabled | bool
+
 - name: Підсумок
   ansible.builtin.debug:
     msg:

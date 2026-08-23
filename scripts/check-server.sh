@@ -240,6 +240,27 @@ check_tool jpegoptim "стиснення jpeg"
 check_tool webpmux  "робота з метаданими webp"
 check_tool rclone   "копіювання фото в об'єктне сховище"
 
+# ── Воркери Messenger ────────────────────────────────────────────────────────
+# Без них не йде пошта, не працює розклад і бекапи — черга лише накопичується,
+# без жодної помилки на сайті. Юніти іменуються sol-messenger-<транспорт>
+# (роль) або messenger.consume.<app>.<транспорт> (платформний деплой).
+head2 "Воркери Messenger"
+
+check_worker() {
+    unit=$(systemctl list-units --all --plain --no-legend "sol-messenger-$1.service" "messenger.consume.*.$1.service" 2>/dev/null | awk 'NR==1{print $1}')
+    if [ -z "$unit" ]; then
+        warn "немає юніта воркера $1 — $2"
+    elif systemctl is-active --quiet "$unit"; then
+        ok "$unit активний"
+    else
+        warn "$unit не запущений — $2"
+    fi
+}
+
+check_worker async             "пошта, SMS, обміни із зовнішніми системами"
+check_worker scheduler_default "розклад: періодичні команди платформи"
+check_worker heavy             "довгі задачі: бекап зображень, карта сайту"
+
 # ── Підсумок ─────────────────────────────────────────────────────────────────
 printf '\n'
 if [ "$fails" -gt 0 ]; then

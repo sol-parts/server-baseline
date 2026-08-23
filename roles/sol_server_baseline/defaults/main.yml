@@ -135,5 +135,18 @@ sol_console_wrapper: /usr/local/bin/syli
 sol_messenger_transports:
   - async
   - scheduler_default
+  - heavy
 sol_messenger_time_limit: 3600
 sol_messenger_memory_limit: 512M
+
+# Транспорт heavy — рідкі довгі задачі (бекап зображень, sitemap). Строго один
+# процес на інстанс: systemd не запускає другий екземпляр юніта, тож два важкі
+# процеси ніколи не біжать паралельно — інакше легко покласти сервер.
+# Воркер виходить після кожної задачі (--limit=1, не --time-limit): свіжий процес
+# і нове з'єднання з БД на кожен запуск — після багатогодинної задачі не
+# лишається ні протухлого з'єднання, ні накопиченої пам'яті.
+# TimeoutStopSec: при зупинці юніта systemd чекає завершення поточної задачі
+# стільки, потім SIGKILL (недороблене повернеться в чергу за redeliver_timeout).
+# Стартове значення 10 год — якщо якась задача впреться в стелю, підняти.
+sol_messenger_heavy_limit: 1
+sol_messenger_heavy_stop_timeout: 36000
