@@ -153,17 +153,19 @@ if command -v mariadb >/dev/null 2>&1 || command -v mysql >/dev/null 2>&1; then
         warn "рекомендовано MariaDB 10.6 або новішу"
     fi
 
-    if vars=$("$db_cli" -N -B -e "SELECT @@sql_mode, @@ft_min_word_len, @@character_set_server;" 2>/dev/null); then
+    if vars=$("$db_cli" -N -B -e "SELECT @@sql_mode, @@innodb_flush_method, @@character_set_server;" 2>/dev/null); then
         sql_mode=$(printf '%s' "$vars" | cut -f1)
-        ft_min=$(printf '%s' "$vars" | cut -f2)
+        flush_method=$(printf '%s' "$vars" | cut -f2)
         charset=$(printf '%s' "$vars" | cut -f3)
 
         case "$sql_mode" in
             *STRICT_TRANS_TABLES*) fail "sql_mode містить STRICT_TRANS_TABLES — ламає імпорт прайсів" ;;
             *) ok "sql_mode без строгого режиму" ;;
         esac
-        [ "$ft_min" = "1" ] && ok "ft_min_word_len = 1" \
-            || fail "ft_min_word_len = ${ft_min} — пошук не бачитиме коротких артикулів (M8, R15)"
+        # Параметр статичний: розбіжність означає, що конфіг з'явився вже після
+        # старту служби (або його перекриває інший файл у /etc/my.cnf.d)
+        [ "$flush_method" = "fsync" ] && ok "innodb_flush_method = fsync" \
+            || fail "innodb_flush_method = ${flush_method} — сторінки поза buffer pool не кешуються ядром; потрібен перезапуск MariaDB з 99-sol.cnf"
         [ "$charset" = "utf8mb4" ] && ok "character_set_server = utf8mb4" \
             || fail "character_set_server = ${charset} (потрібно utf8mb4)"
     else

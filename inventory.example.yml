@@ -30,9 +30,11 @@ sol_shop:
 
     # ─── Розмір сервера ───
     # Три головні споживачі пам'яті ділять RAM машини: MariaDB (buffer pool),
-    # Meilisearch (індекси) і PHP-FPM (max_children × memory_limit).
+    # Meilisearch (індекси) і PHP-FPM (max_children × memory_limit). Пул MariaDB
+    # тримайте малим (RAM/16): решту читань обслуговує page cache ядра, і
+    # вільна пам'ять корисніша саме там.
     # Приклад для 16 ГБ:
-    sol_mariadb_innodb_buffer_pool_size: 4G
+    sol_mariadb_innodb_buffer_pool_size: 1G
     sol_php_fpm_max_children: 16
     sol_php_memory_limit: 512M
 

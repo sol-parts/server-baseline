@@ -84,8 +84,10 @@ dnf install -y mariadb-server python3-PyMySQL && systemctl enable --now mariadb
 
 Налаштування у `/etc/my.cnf.d/99-sol.cnf` (зразок —
 `templates/mariadb-sol.cnf.j2`): `sql_mode` без `STRICT_TRANS_TABLES`,
-`ft_min_word_len = 1`, `innodb_ft_min_token_size = 1`, порожній
-`ft_stopword_file`, `utf8mb4`, `innodb_buffer_pool_size` під розмір RAM.
+`utf8mb4`, `innodb_flush_method = fsync`, `innodb_log_file_size = 512M`,
+`innodb_ft_total_cache_size = 128M`, `innodb_buffer_pool_size` як гаряче ядро
+(RAM/16, підлога 512M). Параметри статичні — задавайте їх **до** першого
+старту служби, інакше знадобиться перезапуск.
 
 База й користувач:
 

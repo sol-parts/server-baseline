@@ -66,8 +66,11 @@ sol_db_name: ""
 sol_db_user: ""
 sol_db_password: ""
 
-# Головний споживач RAM у MariaDB. Орієнтир — 25–50 % пам'яті сервера,
-# з урахуванням того, що ту саму пам'ять ділять Meilisearch і PHP-FPM.
+# Гаряче ядро InnoDB, а не основний кеш даних: сервер працює з
+# innodb_flush_method = fsync, тож усе, що не влізло в пул, читається з page
+# cache ядра. Орієнтир — RAM/16 з підлогою 512M (1G покриває машину на 16 ГБ).
+# Класичні «25–50 % RAM під buffer pool» тут шкідливі: пул — анонімна пам'ять,
+# і забрана під нього частка вже не працює як спільний дисковий кеш.
 sol_mariadb_innodb_buffer_pool_size: 1G
 sol_mariadb_max_allowed_packet: 256M
 

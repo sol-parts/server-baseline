@@ -24,9 +24,12 @@ sol.parts самостійно. Читати **до** замовлення: ча
 - **Диск росте від фото**, а не від бази. Плануйте запас або окремий том
   під зображення (у ролі за це відповідає змінна шляху сайту).
 - **Розподіл RAM** у `inventory.yml`: `sol_mariadb_innodb_buffer_pool_size`
-  (25–50 % RAM), `sol_php_fpm_max_children` × `sol_php_memory_limit` (стеля
-  PHP), решта — Meilisearch і сторінковий кеш ОС. Сума цих трьох не має
-  дорівнювати всій пам'яті машини.
+  (орієнтир RAM/16, підлога 512M), `sol_php_fpm_max_children` ×
+  `sol_php_memory_limit` (стеля PHP), решта — Meilisearch і сторінковий кеш
+  ОС. Сума цих трьох не має дорівнювати всій пам'яті машини. Малий пул тут не
+  економія: з `innodb_flush_method = fsync` читання поза пулом обслуговує page
+  cache, і вільна пам'ять працює кешем для обох engine, а не простоює
+  зарезервованою під один.
 - **Swap** бажаний невеликий (2–4 ГБ) як страховка від OOM під час
   переіндексації, а не як заміна пам'яті.
 
@@ -72,8 +75,11 @@ sol.parts самостійно. Читати **до** замовлення: ча
 Значення MariaDB:
 
 - `sql_mode` **без** `STRICT_TRANS_TABLES`;
-- `ft_min_word_len = 1`, `innodb_ft_min_token_size = 1`, порожній
-  `ft_stopword_file` — пошук іде по коротких токенах (`M8`, `R15`);
+- `innodb_flush_method = fsync` — сервер працює на InnoDB, і сторінки поза
+  buffer pool мають лишатися в page cache ядра (дефолт MariaDB 10.6+ —
+  `O_DIRECT` — робить цей кеш для БД невидимим);
+- `innodb_log_file_size = 512M` і `innodb_ft_total_cache_size = 128M` —
+  запас під масовий запис імпорту прайсів;
 - кодування `utf8mb4`.
 
 ## Воркери Messenger
