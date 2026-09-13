@@ -21,7 +21,7 @@ sol_app_name: ""
 sol_site_user: ""
 sol_site_group: solweb
 
-# Розкладка тек. Дефолт збігається з тим, який використовує деплой sol.parts:
+# Розкладка тек. Дефолт збігається з тим, який використовує деплой SOLPARTS:
 # лишивши його як є, ви спрощуєте передачу сервера на супровід і назад.
 sol_site_home: "/var/www/vhosts/{{ sol_site_domain }}"
 sol_site_root: "{{ sol_site_home }}/httpdocs"
