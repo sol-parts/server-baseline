@@ -19,6 +19,13 @@ SITE_HOME=/var/www/vhosts/$DOMAIN
 dnf install -y epel-release && dnf config-manager --set-enabled crb && dnf update -y
 ```
 
+На AlmaLinux 10 прив'яжіть EPEL до мінорної версії ОС — інакше dnf бере гілку під
+CentOS Stream, і частина пакетів (наприклад, certbot) не ставиться через залежності:
+
+```bash
+sed -i 's/\$releasever\${stream:+s}/$releasever_major.$releasever_minor/' /etc/yum.repos.d/epel.repo && dnf clean all
+```
+
 ```bash
 dnf install -y unzip zip p7zip p7zip-plugins tar zstd ImageMagick jpegoptim rclone git rsync logrotate firewalld bind-utils python3-pip python3-packaging && dnf install -y --enablerepo=crb libwebp-tools && pip3 install xlsx2csv
 ```

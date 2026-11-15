@@ -11,6 +11,18 @@
       - dnf-plugins-core
     state: present
 
+# EPEL 10 збирається під кожну мінорну версію ОС окремо (epel/10.2, epel/10.3, …).
+# epel-release будує метапосилання з `$releasever${stream:+s}`, а AlmaLinux 10 кладе
+# /etc/dnf/vars/stream — і dnf бере гілку під CentOS Stream, на мінор попереду ОС, з
+# несумісними залежностями (certbot не ставиться). Прив'язуємо EPEL до мінору ОС.
+# Змінений файл оновлення epel-release вже не перезапише (нова версія ляже .rpmnew).
+- name: Прив'язати EPEL до мінорної версії ОС (EL10)
+  ansible.builtin.replace:
+    path: /etc/yum.repos.d/epel.repo
+    regexp: '\$releasever\$\{stream:\+s\}'
+    replace: '$releasever_major.$releasever_minor'
+  when: ansible_distribution_major_version is version('10', '>=')
+
 # CRB (CodeReady Builder) вимкнено в EL9 за замовчуванням, а частина утиліт для
 # роботи із зображеннями лежить тільки там (див. libwebp-tools нижче).
 - name: Увімкнути репозиторій CRB
