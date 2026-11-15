@@ -89,6 +89,9 @@ curl -fsSL https://raw.githubusercontent.com/sol-parts/server-baseline/main/scri
   ОС, версії ПЗ, порти, пошта, резервні копії. Читати перед замовленням сервера.
 - [docs/manual-install.md](docs/manual-install.md) — той самий базовий стан
   руками, без Ansible.
+- [docs/upgrade-almalinux-10.md](docs/upgrade-almalinux-10.md) — оновлення
+  налаштованого сервера з AlmaLinux 9 на 10 на місці: підготовка, ELevate,
+  повторний прогін ролі, чого очікувати під час простою.
 
 ## Чого тут свідомо немає
 
