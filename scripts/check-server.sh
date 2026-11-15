@@ -38,13 +38,13 @@ if [ -r /etc/os-release ]; then
             if ver_ge "${VERSION_ID%%.*}" 9; then
                 case "${ID:-}" in
                     almalinux) ok "перевірена ОС" ;;
-                    *) warn "магазини ми супроводжуємо на AlmaLinux 9; тут інший дистрибутив сімейства RHEL 9 — вимоги ті самі, але досвіду з ним немає" ;;
+                    *) warn "магазини ми супроводжуємо на AlmaLinux 9 і 10; тут інший дистрибутив сімейства RHEL — вимоги ті самі, але досвіду з ним немає" ;;
                 esac
             else
-                fail "потрібен AlmaLinux 9 або інший дистрибутив сімейства RHEL 9 (виявлено ${VERSION_ID})"
+                fail "потрібен AlmaLinux 9 або 10 (чи інший дистрибутив сімейства RHEL 9+), виявлено ${VERSION_ID}"
             fi
             ;;
-        *) warn "роль перевірена на AlmaLinux 9; тут інше сімейство — усе ставиться вручну" ;;
+        *) warn "роль перевірена на AlmaLinux 9 і 10; тут інше сімейство — усе ставиться вручну" ;;
     esac
 else
     warn "не вдалося визначити дистрибутив"
@@ -75,20 +75,22 @@ fi
 head2 "PHP"
 
 if [ -z "$PHP_BIN" ]; then
-    for candidate in /usr/local/bin/php /opt/remi/php82/root/bin/php php82 php; do
+    for candidate in /usr/local/bin/php /opt/remi/php84/root/bin/php /opt/remi/php82/root/bin/php php84 php82 php; do
         if command -v "$candidate" >/dev/null 2>&1; then PHP_BIN="$candidate"; break; fi
     done
 fi
 
 if [ -z "$PHP_BIN" ]; then
-    fail "PHP не знайдено (шукали /usr/local/bin/php, php82, php)"
+    fail "PHP не знайдено (шукали /usr/local/bin/php, php84, php82, php)"
 else
     php_ver=$("$PHP_BIN" -r 'echo PHP_VERSION;' 2>/dev/null)
     printf '  %s → %s\n' "$PHP_BIN" "${php_ver:-?}"
-    if ver_ge "${php_ver:-0}" 8.2; then
-        ok "версія 8.2+"
+    if ver_ge "${php_ver:-0}" 8.4; then
+        ok "версія 8.4+"
+    elif ver_ge "${php_ver:-0}" 8.2; then
+        warn "PHP ${php_ver}: платформа працює, але безпекова підтримка 8.2/8.3 закінчується — рекомендовано 8.4"
     else
-        fail "потрібен PHP 8.2 або новіший"
+        fail "потрібен PHP 8.2 або новіший (рекомендовано 8.4)"
     fi
 
     modules=$("$PHP_BIN" -m 2>/dev/null | tr 'A-Z' 'a-z')
@@ -147,10 +149,12 @@ if command -v mariadb >/dev/null 2>&1 || command -v mysql >/dev/null 2>&1; then
     db_cli=$(command -v mariadb || command -v mysql)
     db_ver=$("$db_cli" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
     printf '  %s\n' "${db_ver:-версію не визначено}"
-    if ver_ge "${db_ver:-0}" 10.6; then
-        ok "версія 10.6+"
+    if ver_ge "${db_ver:-0}" 10.11; then
+        ok "версія 10.11+"
+    elif ver_ge "${db_ver:-0}" 10.6; then
+        warn "MariaDB ${db_ver}: платформа працює, але 10.6 не підтримується з 06.07.2026 — рекомендовано 10.11"
     else
-        warn "рекомендовано MariaDB 10.6 або новішу"
+        warn "рекомендовано MariaDB 10.11 або новішу"
     fi
 
     if vars=$("$db_cli" -N -B -e "SELECT @@sql_mode, @@innodb_flush_method, @@character_set_server;" 2>/dev/null); then
@@ -233,7 +237,10 @@ check_tool() {
 }
 
 check_tool composer "встановлення залежностей платформи"
-check_tool enca     "визначення кодування текстових прайсів"
+# enca є лише в EPEL 9; на EL10 її немає, і платформа без неї визначає кодування сама
+if [ "${VERSION_ID%%.*}" = "9" ]; then
+    check_tool enca     "визначення кодування текстових прайсів"
+fi
 check_tool xlsx2csv "імпорт великих xlsx"
 check_tool unzip    "розпакування прайсів"
 check_tool 7za      "розпакування прайсів у 7z"

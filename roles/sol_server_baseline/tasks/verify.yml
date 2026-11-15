@@ -61,14 +61,7 @@
   changed_when: false
   failed_when: false
   register: sol_verify_tools
-  loop:
-    - enca
-    - jpegoptim
-    - webpmux
-    - convert
-    - rclone
-    - xlsx2csv
-    - composer
+  loop: "{{ (['enca'] if ansible_distribution_major_version == '9' else []) + ['jpegoptim', 'webpmux', 'convert', 'rclone', 'xlsx2csv', 'composer'] }}"
 
 - name: Утиліт, яких бракує
   ansible.builtin.debug:

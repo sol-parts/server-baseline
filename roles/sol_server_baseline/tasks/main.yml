@@ -10,8 +10,8 @@
       (див. inventory.example.yml).
   tags: always
 
-# Роль писана й перевірена на AlmaLinux 9: репозиторії Remi/MariaDB, імена
-# пакетів і шляхи SCL — саме звідти. Умова ширша (усе сімейство RHEL 9), бо
+# Роль перевірена на AlmaLinux 9 і 10: репозиторії Remi/MariaDB/nginx.org, імена
+# пакетів і шляхи SCL — саме звідти. Умова ширша (усе сімейство RHEL 9+), бо
 # технічно там те саме, але за межами AlmaLinux досвіду немає. На чужому
 # сімействі роль не «частково спрацює», а зупиниться на першому dnf.
 - name: Перевірити сімейство ОС
@@ -20,7 +20,7 @@
       - ansible_os_family == 'RedHat'
       - ansible_distribution_major_version is version('9', '>=')
     fail_msg: >-
-      Потрібен AlmaLinux 9 або інший дистрибутив сімейства RHEL 9.
+      Потрібен AlmaLinux 9 або 10 (чи інший дистрибутив сімейства RHEL 9+).
       Виявлено: {{ ansible_distribution }} {{ ansible_distribution_version }}.
       Вимоги до сервера, якщо ставите вручну на іншій ОС — docs/requirements.md.
   tags: always

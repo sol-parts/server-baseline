@@ -1,9 +1,11 @@
 ---
 # PHP ставимо зі SCL-репозиторію Remi: він дає потрібну версію окремо від
 # системного PHP і не ламає пакети дистрибутива, які на нього спираються.
+# Ключ Remi — свій на кожен мажор ОС (таблиця на rpms.remirepo.net): EL9 — remi2021,
+# EL10 — remi2024. Імена пакетів і шляхи SCL на EL10 ті самі.
 - name: GPG-ключ Remi
   ansible.builtin.rpm_key:
-    key: https://rpms.remirepo.net/RPM-GPG-KEY-remi2021
+    key: "https://rpms.remirepo.net/RPM-GPG-KEY-remi{{ '2024' if ansible_distribution_major_version is version('10', '>=') else '2021' }}"
     state: present
 
 - name: Репозиторій Remi

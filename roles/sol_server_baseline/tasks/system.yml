@@ -27,8 +27,6 @@
       - p7zip-plugins
       - tar
       - zstd
-      # Визначення кодування текстових прайсів (платформа викликає `enca`)
-      - enca
       # Обробка зображень товарів
       - ImageMagick
       - jpegoptim
@@ -41,7 +39,18 @@
       - firewalld
       - bind-utils
       - python3-pip
+      # Модуль ansible pip нижче: в образі AlmaLinux 10 немає ні її, ні setuptools
+      - python3-packaging
     state: present
+
+# enca (визначення кодування текстових прайсів) є лише в EPEL 9. На EL10 її немає,
+# і платформа без неї працює: кодування тоді визначає PHP-перевірка UTF-8 і
+# mb_detect_encoding. p7zip/p7zip-plugins на EL10 дають пакети 7zip-standalone і 7zip.
+- name: Визначення кодування прайсів enca (лише EL9)
+  ansible.builtin.dnf:
+    name: enca
+    state: present
+  when: ansible_distribution_major_version == '9'
 
 # webpmux потрібен команді, що зрізає EXIF із webp. libwebp приїжджає
 # залежністю ImageMagick, але це бібліотека — самі утиліти лежать окремим
